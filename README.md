@@ -1,8 +1,12 @@
 # ASUS aggressive automatic cooling
 
 For this ZenBook UX331UAL, requests the firmware full-speed mode when the
-hottest Intel CPU sensor reaches 75°C. Returns to firmware automatic below
-65°C and holds its previous mode in between. Checks every two seconds.
+hottest Intel CPU sensor stays at or above 75°C for 30 seconds of readings.
+Any reading below 75°C resets that timer. Firmware automatic cooling remains
+active during the wait. Once maximum is requested, it remains active until
+the temperature drops below 65°C, then returns to automatic without a delay.
+Checks every two seconds using a monotonic timer. Temperature changes between
+checks cannot be observed. Restarting the service resets the pending timer.
 The reported 25,500 RPM in full-speed mode is not used for decisions.
 
 Install and start (also starts on subsequent boots):

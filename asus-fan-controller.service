@@ -1,5 +1,5 @@
 [Unit]
-Description=ASUS aggressive automatic CPU fan control (75C/65C)
+Description=ASUS CPU fan control (75C for 30s / auto below 65C)
 StartLimitIntervalSec=0
 
 [Service]

@@ -1,17 +1,19 @@
 #!/usr/bin/python3
-"""Request full fan at 75 C; restore firmware auto below 65 C."""
+"""Request full fan after 30 seconds at >=75 C; restore auto below 65 C."""
 import argparse
 import fcntl
 import logging
 from pathlib import Path
 import signal
 import threading
+import time
 
 HWMON = Path('/sys/class/hwmon')
 FAN_ROOT = Path('/sys/devices/platform/asus-nb-wmi/hwmon')
 HIGH = 75000
 LOW = 65000
 POLL_SECONDS = 2
+HOT_SECONDS = 30
 
 
 def fan_path(root=FAN_ROOT):
@@ -36,12 +38,26 @@ def cpu_temperature(root=HWMON):
     return max(values)
 
 
-def desired_mode(current, temperature):
-    if temperature >= HIGH:
-        return 0
-    if temperature < LOW:
-        return 2
-    return current
+class FanPolicy:
+    def __init__(self):
+        self.mode = 2
+        self.hot_since = None
+
+    def update(self, temperature, now):
+        if self.mode == 0:
+            if temperature < LOW:
+                self.mode = 2
+            self.hot_since = None
+        elif temperature >= HIGH:
+            if self.hot_since is None:
+                self.hot_since = now
+            if now - self.hot_since >= HOT_SECONDS:
+                self.mode = 0
+                self.hot_since = None
+        else:
+            # Every observed dip below 75 C cancels the pending boost.
+            self.hot_since = None
+        return self.mode
 
 
 def set_mode(mode):
@@ -63,9 +79,10 @@ def run():
         try:
             restore_auto()
             mode = 2
+            policy = FanPolicy()
             while not stopped.is_set():
                 temperature = cpu_temperature()
-                target = desired_mode(mode, temperature)
+                target = policy.update(temperature, time.monotonic())
                 # Also reapply the desired mode if another program changed it.
                 actual = int(fan_path().read_text().strip())
                 if target != mode or actual != target:
@@ -89,7 +106,7 @@ def main():
         print(f'CPU: {cpu_temperature() / 1000:.1f} C')
         path = fan_path()
         print(f'Fan control: {path}; mode: {path.read_text().strip()}')
-        print('Thresholds: maximum at >=75 C; automatic at <65 C; polling every 2 seconds')
+        print('Thresholds: maximum after >=75 C for 30 seconds; automatic at <65 C; polling every 2 seconds')
     elif args.restore_auto:
         restore_auto()
     else:

@@ -10,14 +10,26 @@ spec.loader.exec_module(controller)
 
 
 class ControllerTests(unittest.TestCase):
-    def test_hysteresis_and_exact_boundaries(self):
-        mode = 2
-        temperatures = [74000, 75000, 71000, 65000, 64999, 70000, 80000]
-        modes = []
-        for temperature in temperatures:
-            mode = controller.desired_mode(mode, temperature)
-            modes.append(mode)
-        self.assertEqual(modes, [2, 0, 0, 0, 2, 2, 0])
+    def test_full_speed_requires_thirty_seconds_and_auto_has_no_delay(self):
+        policy = controller.FanPolicy()
+        samples = [(0, 75000), (29.9, 80000), (30, 75000),
+                   (32, 71000), (34, 65000), (36, 64999)]
+        self.assertEqual([policy.update(temp, now) for now, temp in samples],
+                         [2, 2, 0, 0, 0, 2])
+
+    def test_dip_below_high_threshold_restarts_entire_timer(self):
+        policy = controller.FanPolicy()
+        samples = [(0, 76000), (28, 76000), (29, 74999),
+                   (30, 76000), (59, 76000), (60, 76000)]
+        self.assertEqual([policy.update(temp, now) for now, temp in samples],
+                         [2, 2, 2, 2, 2, 0])
+
+    def test_each_new_boost_needs_a_fresh_thirty_seconds(self):
+        policy = controller.FanPolicy()
+        samples = [(0, 76000), (30, 76000), (32, 64000),
+                   (34, 76000), (63, 76000), (64, 76000)]
+        self.assertEqual([policy.update(temp, now) for now, temp in samples],
+                         [2, 0, 2, 2, 2, 0])
 
     def test_hottest_cpu_sensor_and_invalid_reading(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -54,7 +66,8 @@ class ControllerTests(unittest.TestCase):
             stop = Mock()
             stop.is_set.return_value = False
             with patch.object(controller, 'fan_path', return_value=pwm), \
-                 patch.object(controller, 'cpu_temperature', side_effect=[76000, RuntimeError('sensor lost')]), \
+                 patch.object(controller, 'cpu_temperature', side_effect=[76000, 76000, RuntimeError('sensor lost')]), \
+                 patch.object(controller.time, 'monotonic', side_effect=[0, 30]), \
                  patch.object(controller.threading, 'Event', return_value=stop), \
                  patch.object(controller.signal, 'signal'), \
                  patch('builtins.open', return_value=lock), \
