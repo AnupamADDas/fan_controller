@@ -1,0 +1,19 @@
+[Unit]
+Description=ASUS aggressive automatic CPU fan control (75C/65C)
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/asus-fan-controller.py
+ExecStopPost=/usr/bin/python3 /usr/local/sbin/asus-fan-controller.py --restore-auto
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
